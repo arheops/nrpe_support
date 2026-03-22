@@ -73,6 +73,13 @@ class AstChannelsCheck:
         return self.args.C
 
     @staticmethod
+    def clean_output(output):
+        return [
+            line for line in output.splitlines()
+            if not line.startswith("Asterisk ending")
+        ]
+
+    @staticmethod
     def make_install():
         myself = sys.argv[0]
         os.system(
@@ -89,26 +96,32 @@ class AstChannelsCheck:
                 stderr=None,
                 shell=True,
             ) as process:
-                output = process.communicate()[0].decode("utf-8")
-                channels, calls, processed_calls = re.findall(r"\d+", output)
+                output = self.clean_output(
+                    process.communicate()[0].decode("utf-8")
+                )
+                channels, calls, processed_calls = re.findall(
+                    r"\d+", " ".join(output)
+                )
                 self.count = int(calls)
                 return_string = (
-                    f"{channels} active channels "
-                    f"{calls} active calls "
-                    f"{processed_calls} calls processed"
-                )
+                    "{} active channels "
+                    "{} active calls "
+                    "{} calls processed"
+                ).format(channels, calls, processed_calls)
                 performance = (
-                    f"'channels.active'={channels};"
-                    f"{self.warn_threshold};{self.critical_threshold};;"
-                    f" 'calls.active'={calls};;;;"
-                )
+                    "'channels.active'={};"
+                    "{};{};;"
+                    " 'calls.active'={};;;;"
+                ).format(channels, self.warn_threshold, self.critical_threshold, calls)
                 return_string += " | " + performance
                 self.return_code = NagiosResponseCode.OK
         except CalledProcessError as e:
-            print(f"ERROR: Error running command (line {e.__traceback__.tb_lineno}): {e}")
+            print("ERROR: Error running command (line {}): {}".format(
+                e.__traceback__.tb_lineno, e))
             self.return_code = NagiosResponseCode.UNKNOWN
         except Exception as e:
-            print(f"ERROR: Error in code (line {e.__traceback__.tb_lineno}): {e}")
+            print("ERROR: Error in code (line {}): {}".format(
+                e.__traceback__.tb_lineno, e))
             self.return_code = NagiosResponseCode.UNKNOWN
 
         self.process_output(return_string)
@@ -123,15 +136,14 @@ class AstChannelsCheck:
                 stderr=None,
                 shell=True,
             ) as process:
-                output = process.communicate()[0].decode("utf-8")
+                output = self.clean_output(
+                    process.communicate()[0].decode("utf-8")
+                )
                 peers_critical_online, peers_critical_offline = (
                     self.check_critical_peers(output)
                 )
 
-                last_line = output.splitlines()[-1]
-                if last_line.startswith("Asterisk ending"):
-                    last_line = output.splitlines()[-2]
-
+                last_line = output[-1]
                 result_array = [int(val) for val in re.findall(r"\d+", last_line)]
                 (
                     peers,
@@ -145,26 +157,33 @@ class AstChannelsCheck:
                 online_all = monitored_online + unmonitored_online
                 offline_all = monitored_offline + unmonitored_offline
                 return_string = (
-                    f"{peers} sip peers, {online_all} online, {offline_all} offline"
-                )
+                    "{} sip peers, {} online, {} offline"
+                ).format(peers, online_all, offline_all)
 
                 performance = (
-                    f"'peers.all'={peers};"
-                    f"{self.warn_threshold};{self.critical_threshold};;"
-                    f" 'peers.monitored.online'={monitored_online};;;;"
-                    f" 'peers.monitored.offline'={monitored_offline};;;;"
-                    f" 'peers.unmonitored.online'={unmonitored_online};;;;"
-                    f" 'peers.unmonitored.offline'={unmonitored_offline};;;;"
-                    f" 'peers.critical.online'={peers_critical_online};;;;"
-                    f" 'peers.critical.offline'={peers_critical_offline};;;;"
+                    "'peers.all'={};"
+                    "{};{};;"
+                    " 'peers.monitored.online'={};;;;"
+                    " 'peers.monitored.offline'={};;;;"
+                    " 'peers.unmonitored.online'={};;;;"
+                    " 'peers.unmonitored.offline'={};;;;"
+                    " 'peers.critical.online'={};;;;"
+                    " 'peers.critical.offline'={};;;;"
+                ).format(
+                    peers, self.warn_threshold, self.critical_threshold,
+                    monitored_online, monitored_offline,
+                    unmonitored_online, unmonitored_offline,
+                    peers_critical_online, peers_critical_offline,
                 )
                 return_string += " | " + performance
                 self.return_code = NagiosResponseCode.OK
         except CalledProcessError as e:
-            print(f"ERROR: Error running command (line {e.__traceback__.tb_lineno}): {e}")
+            print("ERROR: Error running command (line {}): {}".format(
+                e.__traceback__.tb_lineno, e))
             self.return_code = NagiosResponseCode.UNKNOWN
         except Exception as e:
-            print(f"ERROR: Error in code (line {e.__traceback__.tb_lineno}): {e}")
+            print("ERROR: Error in code (line {}): {}".format(
+                e.__traceback__.tb_lineno, e))
             self.return_code = NagiosResponseCode.UNKNOWN
 
         self.process_output(return_string)
@@ -187,7 +206,7 @@ class AstChannelsCheck:
             self.return_code = NagiosResponseCode.OK.value
             self.return_msg = NagiosResponseCode.OK.name
 
-        print(f"{self.return_msg}: {return_string}")
+        print("{}: {}".format(self.return_msg, return_string))
         sys.exit(self.return_code)
 
     def process(self):
